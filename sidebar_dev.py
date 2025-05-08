@@ -3,11 +3,13 @@ from ui_dev import clear_query_history
 from hybrid_dev import ExampleEmbeddingFunction
 from system_prompt import EXPERT_Q_AND_A_SYSTEM
 from data_preprocessing import parse_pdf, convert_to_documents, convert_img_to_tables
+from demo_retriever import MyCustomRetriever
 
 import os
 from io import StringIO
 import PyPDF2
 from pymilvus import MilvusClient
+from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core import (
     Document,
@@ -20,6 +22,9 @@ from llama_index.core import (
 from llama_index.postprocessor.flag_embedding_reranker import (
     FlagEmbeddingReranker,
 )
+from llama_index.core.indices.property_graph import PropertyGraphIndex
+from llama_index.graph_stores.nebula import NebulaPropertyGraphStore
+from llama_index.core.vector_stores.simple import SimpleVectorStore
 from llama_index.vector_stores.milvus import MilvusVectorStore
 from llama_index.llms.ollama import Ollama
 
@@ -78,15 +83,15 @@ def get_embed_model(embed_path):
 
 
 def load_model():
-    llm = Ollama(model="qwen3:latest", request_timeout=3600)
+    llm = Ollama(model="qwen2.5:latest", request_timeout=3600)
     embed_model = get_embed_model(embed_path="/root/autodl-tmp/bge-m3")
     Settings.llm = llm
     Settings.embed_model = embed_model
     st.session_state["llm"] = llm
     st.session_state["embed_model"] = embed_model
-    st.session_state["reranker"] = FlagEmbeddingReranker(
-        model="/root/autodl-tmp/bge-reranker-v2-m3", top_n=5
-    )
+    # st.session_state["reranker"] = FlagEmbeddingReranker(
+    #     model="/root/autodl-tmp/bge-reranker-v2-m3", top_n=5
+    # )
 
 
 def success_message():
@@ -203,6 +208,7 @@ def create_vector_index(documents):
 
 
 def build_query_engine_from_db(collection_name):
+
     vector_store = MilvusVectorStore(
         uri="./milvus_demo.db",
         token="root:Milvus",
@@ -218,16 +224,37 @@ def build_query_engine_from_db(collection_name):
     index = VectorStoreIndex.from_vector_store(
         vector_store, storage_context=storage_context
     )
-    query_engine = index.as_query_engine(
-        similarity_top_k=10, node_postprocessors=[st.session_state["reranker"]]
+    vector_retriever = index.as_retriever(
+        similarity_top_k=5
     )
-    return query_engine
+
+    graph_store = NebulaPropertyGraphStore(
+        space="llamaindex"
+    )
+
+    vec_store = SimpleVectorStore.from_persist_path(f"./data/vec/{collection_name}.json")
+
+    kg_index = PropertyGraphIndex.from_existing(
+        property_graph_store=graph_store,
+        vector_store=vec_store,
+    )
+    kg_retriever = kg_index.as_retriever(
+        include_text=True,  # include source text in returned nodes, default True
+    )
+
+    demo_retriever = MyCustomRetriever(vector_retriever, kg_retriever)
+    graph_vector_rag_query_engine = RetrieverQueryEngine(demo_retriever)
+
+    # query_engine = index.as_query_engine(
+    #     similarity_top_k=10
+    # )
+    return graph_vector_rag_query_engine
 
 
 def build_query_engine_from_index(index):
-    rerank = FlagEmbeddingReranker(model="/root/autodl-tmp/bge-reranker-v2-m3", top_n=5)
+    # rerank = FlagEmbeddingReranker(model="/root/autodl-tmp/bge-reranker-v2-m3", top_n=5)
     query_engine = index.as_query_engine(
-        similarity_top_k=10, node_postprocessors=[st.session_state["reranker"]]
+        similarity_top_k=10
     )
 
     return query_engine

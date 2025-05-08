@@ -80,11 +80,11 @@ def convert_to_documents(documents, max_characters=512, overlap=50):
         text_seq.append(text)
         document = Document(
             doc_id=chunk.to_dict()["element_id"],
-            text=text,
-            metadata={
-                "page_number": chunk.to_dict()["metadata"]["page_number"],
-                "filename": chunk.to_dict()["metadata"]["filename"],
-            },
+            text=text
+            # metadata={
+            #     # "page_number": chunk.to_dict()["metadata"]["page_number"],
+            #     "filename": chunk.to_dict()["metadata"]["filename"],
+            # },
         )
         documents.append(document)
 

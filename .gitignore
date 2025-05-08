@@ -1,5 +1,6 @@
 ##specify for subdir
 .DS_Store
+*html
 data/
 *.db
 *.ini
@@ -11,6 +12,7 @@ deprecated_codes/
 beir/
 models/
 temp/
+*.ipynb
 
 # logs
 *login*
